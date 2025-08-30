@@ -8,10 +8,11 @@ header-includes:
   - \usepackage{graphicx}
   - \usepackage{listings}
   - \usepackage{xcolor}
+  - \input{listings-glsl.prf}
 ---
 
 \lstset{
-    language=[Sharp]C,                 % Set default language to C#
+    language=[Sharp]C,              % Set default language to C#
     basicstyle=\ttfamily\footnotesize, % Monospace font, small size
     numbers=left,                    % Show line numbers
     numberstyle=\tiny\color{gray},   % Style for line numbers
@@ -536,4 +537,73 @@ private void FixedUpdate() {
         shader.Dispatch(computeKernel, totalParticles / 100, 1, 1); 
         shader.Dispatch(integrateKernel, totalParticles / 100, 1, 1);
 }
+\end{lstlisting}
+
+\clearpage
+
+### SPHCompute compute shader
+
+The SPH Compute function is the function that computes the forces for each particles to neighbouring particles and sends it back to Unity.
+
+\hspace*{5mm}
+
+\begin{lstlisting}[language=GLSL, caption={Vertex Shader}]
+#pragma kernel Integrate // Use the force of each particle to move particle
+#pragma kernel ComputeForces // Compute forces for each particle
+#pragma kernel ComputeDensityPressure // Compute density/pressure for each particle
+
+struct Particle
+{
+    float pressure;
+    float density;
+    float3 currentForce;
+    float3 velocity;
+    float3 position;
+};
+\end{lstlisting}
+
+\clearpage
+
+\begin{lstlisting}[language=GLSL, caption={Fragment Shader}]
+RWStructuredBuffer<Particle> _particles;
+
+float particleMass;
+float viscosity;
+float gasConstant;
+float restDensity;
+float boundDamping;
+float radius;
+float radius3;
+float radius2;
+float radius4;
+float radius5;
+float pi;
+float timestep;
+float3 boxSize;
+float3 spherePos;
+float sphereRadius;
+
+int particleLength;
+\end{lstlisting}
+
+\begin{lstlisting}[language=GLSL, caption="Vertex Shader"]
+RWStructuredBuffer<Particle> _particles;
+
+float particleMass;
+float viscosity;
+float gasConstant;
+float restDensity;
+float boundDamping;
+float radius;
+float radius3;
+float radius2;
+float radius4;
+float radius5;
+float pi;
+float timestep;
+float3 boxSize;
+float3 spherePos;
+float sphereRadius;
+
+int particleLength;
 \end{lstlisting}
