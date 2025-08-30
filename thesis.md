@@ -236,56 +236,44 @@ public struct Particle {
 }
 ```
 
-This structure is only 44 bytes, which is small enough to handle thousands of particles effciently on the GPU. Each particle is initialized with default values in the script, and later updated every frame by the compute shaders (for density, pressure, force and integration).
+This structure is only 44 bytes, which is small enough to handle thousands of particles efficiently on the GPU. Each particle is initialized with default values in the script, and later updated every frame by the compute shaders (for density, pressure, force, and integration).
 
-We will then create a SPH class which will contain all the settings for the SPH Simulation
+We will then create a **SPH class** which will contain all the settings for the SPH Simulation:
 
-<ul>
-<li>General Settings
-    <ul>
-        <li>collisionSphere:- We can assign our test sphere which can interact with the fluid.</li>
-        <li>showSpheres:- Toggle to show the particles in the scene. (useful for debugging).</li>
-        <li>numToSpawn:- Number of particles to spawn along each axis. (X,Y,Z).</li>
-        <li>totalParticles:- The number of particles to spawn, which is set to each axis and multiply them.</li>
-        <li>boxSize:- This is the bounding box of the scene.</li>
-        <li>spawnCenter:- This is the spawn center of the particle grid in the scene.</li>
-        <li>particleRadius:- This is radius of each of our particles.</li>
-        <li>spawnJitter:- A value that will add randomness to our grid so that our grid of particles is not uniform.</li>
-    </ul>
-</li>
-<li>Particle Rendering Settings
-    <ul>
-        <li>particleMesh:- This is the mesh of the particle which we will use.</li>
-        <li>particleRenderSize:- The size in which the particle will render.</li>
-        <li>material:- The material for the particles</li>
-    </ul>
-</li>
-<li>Compute Settings
-    <ul>
-        <li>shader:- This is our compute shader.</li>
-        <li>particles:- The particles list which stores all the particles in the scene.</li>
-    </ul>
-</li>
-<li>Fluid Constants
-    <ul>
-        <li>boundDamping:- The value to use when the particles collide with the boundary, it reflects the velocity and scales it down to simulate energy loss</li>
-        <li>viscosity:- The viscosity of our fluid.</li>
-        <li>particleMass:- The individual mass of the particle.</li>
-        <li>gasConstant:- The value of the gas constant.</li>
-        <li>restDensity:- The rest density of the fluid.</li>
-        <li>timestep:- The timestep of the scene.</li>
-    </ul>
-</li>
-<li>Private Compute Shader Buffer Variables
-    <ul>
-        <li>_argsBuffer:- The arguments related to the values of the objects in the scene which we are sending to the compute shader.</li>
-        <li>_particlesBuffer:- Sending the total amount of particles to the compute shader.</li>
-        <li>integrateKernel:- This is the integrateKernel function from the compute shader.</li>
-        <li>computeKernel:- This is the computeKernel function from the compute shader.</li>
-        <li>densityKernel:- This is the densityKernel function from the compute shader.</li>
-    </ul>
-</li>
-</ul>
+- **General Settings**
+  - `collisionSphere`: We can assign our test sphere which can interact with the fluid.
+  - `showSpheres`: Toggle to show the particles in the scene (useful for debugging).
+  - `numToSpawn`: Number of particles to spawn along each axis (X,Y,Z).
+  - `totalParticles`: The number of particles to spawn (product of the per-axis count).
+  - `boxSize`: The bounding box of the scene.
+  - `spawnCenter`: The spawn center of the particle grid in the scene.
+  - `particleRadius`: Radius of each particle.
+  - `spawnJitter`: Adds randomness so the particle grid is not perfectly uniform.
+
+- **Particle Rendering Settings**
+  - `particleMesh`: Mesh of the particle.
+  - `particleRenderSize`: Size in which the particle will render.
+  - `material`: Material for the particles.
+
+- **Compute Settings**
+  - `shader`: Our compute shader.
+  - `particles`: List that stores all the particles in the scene.
+
+- **Fluid Constants**
+  - `boundDamping`: Value used when particles collide with the boundary (reflects velocity and scales it down to simulate energy loss).
+  - `viscosity`: Viscosity of the fluid.
+  - `particleMass`: Mass of an individual particle.
+  - `gasConstant`: The gas constant.
+  - `restDensity`: Rest density of the fluid.
+  - `timestep`: Simulation timestep.
+
+- **Private Compute Shader Buffer Variables**
+  - `_argsBuffer`: Arguments related to objects in the scene (sent to compute shader).
+  - `_particlesBuffer`: Total amount of particles sent to the compute shader.
+  - `integrateKernel`: The integrate function in the compute shader.
+  - `computeKernel`: The compute function in the compute shader.
+  - `densityKernel`: The density function in the compute shader.
+
 
 ```csharp
 public class SPH : MonoBehaviour
@@ -327,4 +315,91 @@ public class SPH : MonoBehaviour
     private int integrateKernel;
     private int computeKernel;
     private int densityPressureKernel;
+```
+
+---
+
+I am using the ```OnDrawGizmos``` function to the boundary boxes and the ```spawnCenter``` (for debugging).
+
+```csharp
+private void OnDrawGizmos() {
+
+
+        // Draw simulation bounding box
+        Gizmos.color = Color.blue;
+        Gizmos.DrawWireCube(Vector3.zero, boxSize);
+
+        // Draw spawn center (only in editor, not while running)
+        if (!Application.isPlaying) {
+            Gizmos.color = Color.cyan;
+            Gizmos.DrawWireSphere(spawnCenter, 0.1f);
+        }
+
+}
+```
+
+The SpawnParticleInBox() function takes the ```spawnCenter``` and stores it in the variable ```spawnPoint``` and creates a new List called _particles, It it loops and goes in a grid like fashion across the three axis (```x```,```y```, and ```z```), using ```numToSpawn``` to determine the number of particles per axis. Each particle is positioned relative to the ```spawnCenter``` with spacing determined by twice the particle radius.
+
+To avoid the grid being a perfectly uniform grid which will lead to simulation accuracy, a small random offset is added to each position using ```Random.onUnitSphere * particleRadius * spawnJitter```. This creates a slight offset in the particles that should give more accurate results.
+
+```csharp
+private void SpawnParticlesInBox() {
+
+        Vector3 spawnPoint = spawnCenter;
+        List<Particle> _particles = new List<Particle>();
+
+        for (int x = 0; x < numToSpawn.x; x++) {
+            for (int y = 0; y < numToSpawn.y; y++) {
+                for (int z = 0; z < numToSpawn.z; z++) {
+
+                    Vector3 spawnPos = spawnPoint + new Vector3(x*particleRadius*2, y*particleRadius*2, z*particleRadius*2);
+
+                    // Randomize spawning position a little bit for more convincing simulation
+                    spawnPos += Random.onUnitSphere * particleRadius * spawnJitter; 
+
+                    Particle p = new Particle {
+                        position = spawnPos
+                    };
+
+                    _particles.Add(p);
+                }
+            }
+        }
+
+        particles = _particles.ToArray();
+
+}
+```
+
+\clearpage
+
+The Awake function is called when the simulation object is initalized, It first calls ```SpawnParticlesInBox()``` to generate the initial particle distribution. Afterwards, it sets up the data structures required for the GPU compute shaders. 
+
+And Finally it calls the ```SetupComputeBuffers()```.
+
+
+```csharp
+private void Awake() {
+
+        SpawnParticlesInBox(); // Spawn Particles
+
+        // Setup Args for Instanced Particle Rendering
+        uint[] args = {
+            particleMesh.GetIndexCount(0),
+            (uint)totalParticles,
+            particleMesh.GetIndexStart(0),
+            particleMesh.GetBaseVertex(0),
+            0
+        };
+
+        _argsBuffer = new ComputeBuffer(1,args.Length * sizeof(uint), ComputeBufferType.IndirectArguments);
+        _argsBuffer.SetData(args);
+
+        // Setup Particle Buffer
+        _particlesBuffer = new ComputeBuffer(totalParticles,44);
+        _particlesBuffer.SetData(particles);
+
+        SetupComputeBuffers();
+
+}
 ```
