@@ -170,7 +170,7 @@ MonoBehaviour:
   showSpheres: 1
   numToSpawn: {x: 10, y: 10, z: 10}
   boxSize: {x: 4.18, y: 10, z: 3}
-  spawnCenter: {x: 0, y: 3.62, z: 0}
+  spawnCenter: {x: -0.36, y: 3.62, z: -0.52}
   particleRadius: 0.1
   spawnJitter: 0.2
   particleMesh: {fileID: 2540817853737639666, guid: d2bcb9b63a067d643b56910fd449b51b, type: 3}
@@ -183,7 +183,7 @@ MonoBehaviour:
   particleMass: 1
   gasConstant: 2
   restingDensity: 1
-  timestep: 0.007
+  timestep: 0.0007
 --- !u!1 &705507993
 GameObject:
   m_ObjectHideFlags: 0
@@ -378,7 +378,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 963194225}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7182cac652d7f6641b7c75b05bb7d010, type: 3}
   m_Name: 

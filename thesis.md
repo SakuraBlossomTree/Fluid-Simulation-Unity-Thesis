@@ -6,7 +6,25 @@ mainFont: "Times New Roman"
 geometry: margin=1in
 header-includes:
   - \usepackage{graphicx}
+  - \usepackage{listings}
+  - \usepackage{xcolor}
 ---
+
+\lstset{
+    language=[Sharp]C,                 % Set default language to C#
+    basicstyle=\ttfamily\footnotesize, % Monospace font, small size
+    numbers=left,                    % Show line numbers
+    numberstyle=\tiny\color{gray},   % Style for line numbers
+    stepnumber=1,                    % Number every line
+    frame=single,                    % Draw a box around code
+    breaklines=true,                 % Automatically break long lines
+    breakatwhitespace=false,         % Allow breaking at any character
+    showstringspaces=false,          % Don't mark spaces in strings
+    keywordstyle=\color{blue},       % Keywords in blue
+    commentstyle=\color{green!60!black}, % Comments in green
+    stringstyle=\color{orange},      % Strings in orange
+    tabsize=4                        % Tab width
+}
 
 \hrule
 
@@ -224,7 +242,9 @@ We then create a SPH.cs script that initialize the particles that we are going t
 
 The First step in the script is to define a data structure that represents a single particle in the simulation. Each particle needs to store its physical properties (pressure, density), its current motion (velocity, force), and its position in the world. To make sure this structure is compatible between C# and the compute shader, it is laid out in memory sequentially. 
 
-```csharp
+\hspace*{5mm}
+
+\begin{lstlisting}[caption={Particle struct},captionpos=b]
 [System.Serializable]
 [StructLayout(LayoutKind.Sequential, Size=44)]
 public struct Particle {
@@ -234,9 +254,11 @@ public struct Particle {
     public Vector3 velocity; // 32 bytes
     public Vector3 position; // 44 total bytes
 }
-```
+\end{lstlisting}
 
 This structure is only 44 bytes, which is small enough to handle thousands of particles efficiently on the GPU. Each particle is initialized with default values in the script, and later updated every frame by the compute shaders (for density, pressure, force, and integration).
+
+\clearpage
 
 We will then create a **SPH class** which will contain all the settings for the SPH Simulation:
 
@@ -274,8 +296,9 @@ We will then create a **SPH class** which will contain all the settings for the 
   - `computeKernel`: The compute function in the compute shader.
   - `densityKernel`: The density function in the compute shader.
 
+\clearpage
 
-```csharp
+\begin{lstlisting}[caption={SPH Class and Settings},captionpos=b]
 public class SPH : MonoBehaviour
 {
     [Header("General")]
@@ -315,13 +338,17 @@ public class SPH : MonoBehaviour
     private int integrateKernel;
     private int computeKernel;
     private int densityPressureKernel;
-```
 
----
+}
+\end{lstlisting}
+
+\clearpage
 
 I am using the ```OnDrawGizmos``` function to the boundary boxes and the ```spawnCenter``` (for debugging).
 
-```csharp
+\hspace*{5mm}
+
+\begin{lstlisting}[caption={OndrawGizmos() function},captionpos=b]
 private void OnDrawGizmos() {
 
 
@@ -336,13 +363,25 @@ private void OnDrawGizmos() {
         }
 
 }
-```
+\end{lstlisting}
+
+\begin{figure}[ht!]
+    \centering
+    \begin{minipage}{0.48\textwidth}
+        \centering
+        \includegraphics[height=12cm]{gizmos.png}
+        \caption{Gizmos Box}
+        \label{fig:gizmos_box}
+    \end{minipage}
+\end{figure}
 
 The SpawnParticleInBox() function takes the ```spawnCenter``` and stores it in the variable ```spawnPoint``` and creates a new List called _particles, It it loops and goes in a grid like fashion across the three axis (```x```,```y```, and ```z```), using ```numToSpawn``` to determine the number of particles per axis. Each particle is positioned relative to the ```spawnCenter``` with spacing determined by twice the particle radius.
 
 To avoid the grid being a perfectly uniform grid which will lead to simulation accuracy, a small random offset is added to each position using ```Random.onUnitSphere * particleRadius * spawnJitter```. This creates a slight offset in the particles that should give more accurate results.
 
-```csharp
+\hspace*{10mm}
+
+\begin{lstlisting}[caption={SpawnParticleInBox() function},captionpos=b, mathescape=true]
 private void SpawnParticlesInBox() {
 
         Vector3 spawnPoint = spawnCenter;
@@ -369,7 +408,17 @@ private void SpawnParticlesInBox() {
         particles = _particles.ToArray();
 
 }
-```
+\end{lstlisting}
+
+\begin{figure}[ht!]
+    \centering
+    \begin{minipage}{0.48\textwidth}
+        \centering
+        \includegraphics[height=12cm]{particlegrid.png}
+        \caption{Particle in a grid box}
+        \label{fig:particle_grid_box}
+    \end{minipage}
+\end{figure}
 
 \clearpage
 
@@ -377,8 +426,9 @@ The Awake function is called when the simulation object is initalized, It first 
 
 And Finally it calls the ```SetupComputeBuffers()```.
 
+\hspace*{5mm}
 
-```csharp
+\begin{lstlisting}
 private void Awake() {
 
         SpawnParticlesInBox(); // Spawn Particles
@@ -402,4 +452,88 @@ private void Awake() {
         SetupComputeBuffers();
 
 }
-```
+\end{lstlisting}
+
+\clearpage
+
+The function ```SetupComputeBuffers``` sets up all the Buffers from the compute shader and also passes the values which are calculated from the ```SPH.cs``` script to the compute shader. 
+
+\hspace*{5mm}
+
+\begin{lstlisting}
+private void SetupComputeBuffers() {
+
+        integrateKernel = shader.FindKernel("Integrate");
+        computeKernel = shader.FindKernel("ComputeForces");
+        densityPressureKernel = shader.FindKernel("ComputeDensityPressure");
+
+        shader.SetInt("particleLength", totalParticles);
+        shader.SetFloat("particleMass", particleMass);
+        shader.SetFloat("viscosity", viscosity);
+        shader.SetFloat("gasConstant", gasConstant);
+        shader.SetFloat("restDensity", restingDensity);
+        shader.SetFloat("boundDamping", boundDamping);
+        shader.SetFloat("pi", Mathf.PI);
+        shader.SetVector("boxSize", boxSize);
+
+        shader.SetFloat("radius", particleRadius);
+        shader.SetFloat("radius2", particleRadius * particleRadius);
+        shader.SetFloat("radius3", particleRadius * particleRadius * particleRadius);
+        shader.SetFloat("radius4", particleRadius * particleRadius * particleRadius * particleRadius);
+        shader.SetFloat("radius5", particleRadius * particleRadius * particleRadius * particleRadius * particleRadius);
+
+        shader.SetBuffer(integrateKernel, "_particles", _particlesBuffer);
+        shader.SetBuffer(computeKernel, "_particles", _particlesBuffer);
+        shader.SetBuffer(densityPressureKernel, "_particles", _particlesBuffer);
+
+}
+\end{lstlisting}
+
+\clearpage
+
+The ```Update``` function is responsible for just rendering the particles that we are initilizing which are rendered with the ```GridParticle.shader```
+
+\hspace*{5mm}
+
+\begin{lstlisting}
+private static readonly int SizeProperty = Shader.PropertyToID("_size");
+private static readonly int ParticlesBufferProperty = Shader.PropertyToID("_particlesBuffer");
+
+private void Update() {
+
+    // Render the particles
+    material.SetFloat(SizeProperty, particleRenderSize);
+    material.SetBuffer(ParticlesBufferProperty, _particlesBuffer);
+
+    if (showSpheres) 
+        Graphics.DrawMeshInstancedIndirect (
+            particleMesh,
+            0,
+            material,
+            new Bounds(Vector3.zero, boxSize),
+            _argsBuffer,
+            castShadows: UnityEngine.Rendering.ShadowCastingMode.Off
+        );
+
+
+}
+\end{lstlisting}
+
+The ```FixedUpdate``` is called every physics frame. This function passes all the parameters to the compute shader and dispatches the individual kernels and divides them by 100 because the kernel we are using uses 100 threads.
+
+\hspace*{5mm}
+
+\begin{lstlisting}
+private void FixedUpdate() {
+
+        shader.SetVector("boxSize", boxSize);
+        shader.SetFloat("timestep", timestep);
+        shader.SetVector("spherePos", collisionSphere.transform.position);
+        shader.SetFloat("sphereRadius", collisionSphere.transform.localScale.x/2);
+
+        // Total Particles has to be divisible by 100 
+        shader.Dispatch(densityPressureKernel, totalParticles / 100, 1, 1); 
+        shader.Dispatch(computeKernel, totalParticles / 100, 1, 1); 
+        shader.Dispatch(integrateKernel, totalParticles / 100, 1, 1);
+}
+\end{lstlisting}
