@@ -29,7 +29,9 @@ header-includes:
 
 \hrule
 
-## Abstract
+\clearpage
+
+# Abstract
 
 Realistically animated fluids can add substantial realism to interactive applications such as virtual surgery simulators or computer games. In this paper we try to implement a Fluid Simulation using Smooth Particle Hydrodynamics (SPH) to simulate fluids with free surfaces in Unity Game Engine. The method is an extension of the SPH-based technique by Desbrun to animate highly deformable bodies adapting it for interactive real-time use in Unity.
 
@@ -41,9 +43,9 @@ Results demonstrate that the method produces visually plausible fluid motion wit
 
 \hrule
 
-## Introduction
+# 1. Introduction
 
-### Motivation
+## 1.1 Motivation
 
 Fluids (i.e liquids and gases) play an important role in every day life. Examples of fluid phenomena are wind, weather, ocean waves, waves induced by ships or simply pouring of a glass of water. As simple and ordinary these phenomena may seem, as complex and difficult it is to simulate them. Even though Computational Fluid Dynamics (CFD) is a well established research area with a long history, there are still many open research problems in the field. The reason for the complexity of fluid behaviour is the complex interplay of various phenomena such as convection, diffusion, turbulence and surface tension. Fluid phenomena are typically simulated off-time and then visualized in a second step e.g. in aerodynamics or optimization of turbines or pipes with the goal of being accurate as possible.
 
@@ -51,11 +53,11 @@ Fluids (i.e liquids and gases) play an important role in every day life. Example
 
 Less accurate methods that allow the simulation of fluid effects in real-time open up a variety of new applications. In the fields mentioned above real-time methods help to test whether a certain concept is promising during the design phase. Other applications for real-time simulation techniques for fluids are medical simulators, computer games or any type of virtual environment. We will take a look into the computer game side of the fluid simulation
 
-### Topic
+## 1.2 Topic
 
 The focus of this thesis is Smoothed Particle Hydrodynamics (SPH), a particle-based method for simulating the flow of fluids. While SPH can be also applied to gases, in this work the emphasis will be place on liquid fluids only.
 
-## Smooth Particle Hydrodynamics
+# 2. Smooth Particle Hydrodynamics
 
 Although Smoothed Particle Hydrodynamics (SPH) was developed for the simulation of astrophysical problems, the method in general enough to be used in any kind of fluid simulation.
 
@@ -78,7 +80,7 @@ The particle mass and density appear in Eqn. $(1)$ because each particle $i$ rep
 \end{align}
 
 
-## Modelling Fluids with Particles
+# 3. Modelling Fluids with Particles
 
 In the Eulerian (grid based) formulation, isothermal fluids are described by a velocity field $v$, a density field $\rho$ and a pressure field $p$. The evolution of these quentities over time is given by two equations. The first equation assures convservation of mass.
 
@@ -116,7 +118,7 @@ Now we will see the force density terms using SPH.
 
 \clearpage
 
-### Pressure
+## 3.1 Pressure
 
 Application of the SPH rule described in Eqn $(1)$ to the pressure term $-\nabla p$ yields
 
@@ -146,13 +148,13 @@ p = k (\rho - \rho_0)
 
 where $\rho_0$ is the rest density. Which I have given as a constant
 
-### External Forces
+## 3.2 External Forces
 
 In the Unity Project which supports gravity, collision forces and forces caused by user interaction. These forces are applied directly to the particles without the use of SPH. When the particles collide with any solid object such as the blue box in my Unity Simulation, we simply push them out of the object and reflect the velocity component that is perpendicular to the object's surface.
 
 \clearpage
 
-## Smoothing kernels
+# 4. Smoothing kernels
 
 Smoothing kernels are fundamental in SPH as they determine how particle properties are interpolated over space. They provide stability, accuracy and computational effciency to the simulation, such as density estimation, pressure forces, and viscosity. I have used two types of smoothing kernels
 
@@ -195,13 +197,48 @@ W_{\text{spiky}}(\mathbf{r}, h) = \frac{15}{\pi h^6}
 
 \clearpage
 
-## Surface Rendering via Ray Marching
+## 4.1 Derivation of Kernel Functions
 
-### The Rendering Problem
+### 4.1.1 Poly6 Kernel Derivation
+
+\begin{align}
+W(r,h) &= \frac{315}{64 \pi h^9} (h^2 - r^2)^3 \\
+       &= \frac{315}{64 \pi h^9} \Big(h^2 \big(1 - \frac{r^2}{h^2}\big)\Big)^3 \\
+       &= \frac{315}{64 \pi h^9} h^6 \left(1 - \frac{r^2}{h^2}\right)^3 \\
+       &= \frac{315}{64 \pi h^3} \left(1 - \frac{r^2}{h^2}\right)^3 \\
+       &= \frac{315}{64 \pi h^3} x^3, \quad \text{with } x = 1 - \frac{r^2}{h^2}
+\end{align}
+
+### 4.1.2 Spiky Kernel First Derivate
+
+\begin{align}
+\frac{dW}{dr} &= - \frac{45}{\pi h^6} (h - r)^2 \\
+              &= - \frac{45}{\pi h^6} \big(h^2 (1 - r/h)^2 \big) \\
+              &= - \frac{45}{\pi h^4} (1 - r/h)^2 \\
+              &= - \frac{45}{\pi h^4} x^2, \quad \text{with } x = 1 - r/h
+\end{align}
+
+### 4.1.3 Spiky Kernel Second Derivate
+
+\begin{align}
+\frac{dW}{dr} &= \frac{d}{dr} \left[- \frac{45}{\pi h^6} (h - r)^2 \right] \\
+              &= - \frac{45}{\pi h^6} \cdot 2 (h - r) \cdot \frac{d}{dr}(h - r) \\
+              &= - \frac{45}{\pi h^6} \cdot 2 (h - r) \cdot (-1) \\
+              &= \frac{90}{\pi h^6} (h - r) \\
+              &= \frac{90}{\pi h^6} \big(h (1 - r/h)\big) \\
+              &= \frac{90}{\pi h^6} h \, x \quad \text{with } x = 1 - r/h \\
+              &= \frac{90}{\pi h^5} x
+\end{align}
+
+\clearpage
+
+# 5. Surface Rendering via Ray Marching
+
+## 5.1 The Rendering Problem
 
 The SPH produces a set of discrete particles, each representing a point within the fluid volume. A native rendering of these particles as individual spheres or points fails to convey the impression of continuous fluid with a coherent surface. Therefore, a method is required to reconstruct and render a visually plausible surface from this particle data in real-time.
 
-### The Different techniques of Rendering Methods
+## 5.2 The Different techniques of Rendering Methods
 
 Two primary techniques exist for this task: polygonization and screen-space rendering.
 
@@ -209,11 +246,11 @@ Two primary techniques exist for this task: polygonization and screen-space rend
 
 * Screen-space methods, by contrast, operate directly on the GPU for each pixel on the screen. The choosen method for this project is Ray Marching an implicit surface, which avoids the creation of any intermediate geometry and is exceptionally well-suited for the parallel architecture of the GPU.
 
-### Theory of Ray Marching
+## 5.3 Theory of Ray Marching
 
 The core of the rendering technique is to define the fluid surface not with triangles, but as an implicit surface. The surface is defined as the set of all points $p$ in space where a function $\textbf{F(p)}$ equals zero. Specifically, we use a Signed Distance Field (SDF), a special type of implicit function that, for any point $p$, returns the shortest distance to the surface. The sign of the distance is positive outside the fluid and negative inside.
 
-### Constructing the Fluid SDF
+## 5.4 Constructing the Fluid SDF
 
 The SDF for the entire fluid is built by combining the SDFs of the individual particles. A single is presented by a sphere, whose SDF is given by:
 
@@ -221,7 +258,7 @@ equation here
 
 To combine the fields from all particles into a single, smooth "blobby" surface, a simple minimum operation is insufficient as it would create sharp creases. Instead, a polynomial smooth minimum( $smin$ ) function is used. This smoothly bends the distance fields of nearby particles.
 
-### The Ray Marching Algorithm
+## 5.5 The Ray Marching Algorithm
 
 With the SDF defined, the surface can be rendered using a ray marching algorithm, also known as sphere tracing. For each pixel on the screen, a ray is cast from the camera. The algorithm proceeds iteratively:
 
@@ -231,15 +268,17 @@ With the SDF defined, the surface can be rendered using a ray marching algorithm
 
 This process is highly efficient as it takes the largest possible safe steps through empty space.
 
-## Implementation and Methods
+# 6. Implementation and Methods
 
-### Project Setup
+## 6.1 Project Setup
 
 A simple object scene was prepared in order for the simulation to be tested. There is a simple Ground cube and a few test objects which are the sphere and cube here.
 
 We then create a SPH.cs script that initialize the particles that we are going to use.
 
-### SPH.cs Script implementation
+## 6.2 SPH.cs Script implementation
+
+### 6.2.1 Particle Sturcture
 
 The First step in the script is to define a data structure that represents a single particle in the simulation. Each particle needs to store its physical properties (pressure, density), its current motion (velocity, force), and its position in the world. To make sure this structure is compatible between C# and the compute shader, it is laid out in memory sequentially. 
 
@@ -260,6 +299,8 @@ public struct Particle {
 This structure is only 44 bytes, which is small enough to handle thousands of particles efficiently on the GPU. Each particle is initialized with default values in the script, and later updated every frame by the compute shaders (for density, pressure, force, and integration).
 
 \clearpage
+
+### 6.2.2 Settings for SPH Class
 
 We will then create a **SPH class** which will contain all the settings for the SPH Simulation:
 
@@ -345,6 +386,8 @@ public class SPH : MonoBehaviour
 
 \clearpage
 
+### 6.2.3 Gizmos Function to Draw the Boxes
+
 I am using the ```OnDrawGizmos``` function to the boundary boxes and the ```spawnCenter``` (for debugging).
 
 \hspace*{5mm}
@@ -370,11 +413,15 @@ private void OnDrawGizmos() {
     \centering
     \begin{minipage}{0.48\textwidth}
         \centering
-        \includegraphics[height=12cm]{gizmos.png}
+        \includegraphics[height=9cm]{gizmos.png}
         \caption{Gizmos Box}
         \label{fig:gizmos_box}
     \end{minipage}
 \end{figure}
+
+\clearpage
+
+### 6.2.4 Spawning the Particles in a Grid
 
 The SpawnParticleInBox() function takes the ```spawnCenter``` and stores it in the variable ```spawnPoint``` and creates a new List called _particles, It it loops and goes in a grid like fashion across the three axis (```x```,```y```, and ```z```), using ```numToSpawn``` to determine the number of particles per axis. Each particle is positioned relative to the ```spawnCenter``` with spacing determined by twice the particle radius.
 
@@ -423,6 +470,8 @@ private void SpawnParticlesInBox() {
 
 \clearpage
 
+### 6.2.5 Initalizing the Simulation
+
 The Awake function is called when the simulation object is initalized, It first calls ```SpawnParticlesInBox()``` to generate the initial particle distribution. Afterwards, it sets up the data structures required for the GPU compute shaders. 
 
 And Finally it calls the ```SetupComputeBuffers()```.
@@ -456,6 +505,8 @@ private void Awake() {
 \end{lstlisting}
 
 \clearpage
+
+### 6.2.6 Setting up Compute Buffers
 
 The function ```SetupComputeBuffers``` sets up all the Buffers from the compute shader and also passes the values which are calculated from the ```SPH.cs``` script to the compute shader. 
 
@@ -492,6 +543,8 @@ private void SetupComputeBuffers() {
 
 \clearpage
 
+### 6.2.7 Rendering the particles
+
 The ```Update``` function is responsible for just rendering the particles that we are initilizing which are rendered with the ```GridParticle.shader```
 
 \hspace*{5mm}
@@ -520,6 +573,8 @@ private void Update() {
 }
 \end{lstlisting}
 
+### 6.2.8 Calling the Compute Shader
+
 The ```FixedUpdate``` is called every physics frame. This function passes all the parameters to the compute shader and dispatches the individual kernels and divides them by 100 because the kernel we are using uses 100 threads.
 
 \hspace*{5mm}
@@ -541,13 +596,22 @@ private void FixedUpdate() {
 
 \clearpage
 
-### SPHCompute compute shader
+## 6.3 SPHCompute compute shader
 
-The SPH Compute function is the function that computes the forces for each particles to neighbouring particles and sends it back to Unity.
+The SPH Compute function is the function that computes the forces for each particles to neighbouring particles and sends the data to Unity to use.
+
+### 6.3.1 Initialization of the Kernels
+
+- **Kernels**
+  - `Integrate`: The `Integrate` kernel updates each particle's position and velocity based on the computed forces.
+  - `ComputeForces`: The `ComputeForces` kernel calculates forces between particles, such as pressure and viscosity interactions.
+  - `ComputeDensityPressure`: The `ComputeDensityPressure` kernel computes each particle's density and pressure.
+
+We are implementing the respective kernels to Integrate the timestep which the ```Integrate``` kernel does, we compute the forces between the particles using ```ComputeForces``` kernel, and finally we are use the ```ComputeDensityPressure``` kernel to compute the density and pressure of each of the particle. 
 
 \hspace*{5mm}
 
-\begin{lstlisting}[language=GLSL, caption={Vertex Shader}]
+\begin{lstlisting}[language=GLSL, caption={Initilize block of the shader},captionpos=b]
 #pragma kernel Integrate // Use the force of each particle to move particle
 #pragma kernel ComputeForces // Compute forces for each particle
 #pragma kernel ComputeDensityPressure // Compute density/pressure for each particle
@@ -562,9 +626,19 @@ struct Particle
 };
 \end{lstlisting}
 
+\hspace*{5mm}
+
+In the particle struct, scalar properties (e.g., pressure, density) are represented by float types, whereas vector properties (e.g., position, velocity, currentForce) are represented by float3 types. The reason they are multiple different radius `radius2`, `radius3`, etc are for kernel optimizations
+
 \clearpage
 
-\begin{lstlisting}[language=GLSL, caption={Fragment Shader}]
+### 6.3.2 Setting up the variables for the Compute shader
+
+We set a ```RWStructedBuffer``` and also set all of the different variables which are passed in the ```SPH.cs``` script
+
+\hspace*{5mm}
+
+\begin{lstlisting}[language=GLSL, caption={Block that contains variables of the shader},captionpos=b]
 RWStructuredBuffer<Particle> _particles;
 
 float particleMass;
@@ -586,24 +660,147 @@ float sphereRadius;
 int particleLength;
 \end{lstlisting}
 
-\begin{lstlisting}[language=GLSL, caption="Vertex Shader"]
-RWStructuredBuffer<Particle> _particles;
 
-float particleMass;
-float viscosity;
-float gasConstant;
-float restDensity;
-float boundDamping;
-float radius;
-float radius3;
-float radius2;
-float radius4;
-float radius5;
-float pi;
-float timestep;
-float3 boxSize;
-float3 spherePos;
-float sphereRadius;
+### 6.3.3 The Integrate Kernel Function
 
-int particleLength;
+\begin{itemize}
+    \item The first two \texttt{float3} variables define the boundaries for the particles so that they do not move outside the simulation box.
+    \item The \texttt{float3 vel} is updated according to Newton's law of motion: \( F = m \cdot a \), where the acceleration is \texttt{currentForce / particleMass} for the given particle.
+    \item The position is updated using the distance–speed–time formula: \( v = \frac{d}{t} \).
+    \item Boundary conditions are enforced by checking if a particle exceeds the domain along any axis. If it does, the velocity is damped by \texttt{boundDamping} and the position is corrected to remain inside the box.
+    \item Below that, the boundary box checks are applied for all axes.
+\end{itemize}
+
+\clearpage
+
+\begin{lstlisting}[language=GLSL, caption={The Integrate kernel}, captionpos=b]
+[numthreads(100,1,1)]
+void Integrate (uint3 id: SV_DISPATCHTHREADID)
+{
+    float3 topRight = boxSize / 2;
+    float3 bottomLeft = -boxSize /2;
+
+    float3 vel = _particles[id.x].velocity + ((_particles[id.x].currentForce/particleMass) * timestep);
+    _particles[id.x].position += vel * timestep;
+
+    
+    // Minimum Enforcements
+
+    if (_particles[id.x].position.x - radius < bottomLeft.x) {
+       vel.x *= boundDamping;
+        _particles[id.x].position.x = bottomLeft.x + radius;
+    }
+
+    if (_particles[id.x].position.y - radius < bottomLeft.y) {
+       vel.y *= boundDamping;
+        _particles[id.x].position.y = bottomLeft.y + radius;
+    }
+
+    if (_particles[id.x].position.z - radius < bottomLeft.z) {
+       vel.z *= boundDamping;
+        _particles[id.x].position.z = bottomLeft.z + radius;
+    }
+
+    // Maximum Enforcements
+
+    if (_particles[id.x].position.x + radius > topRight.x) {
+       vel.x *= boundDamping;
+        _particles[id.x].position.x = topRight.x - radius;
+    }
+
+    if (_particles[id.x].position.y + radius > topRight.y) {
+       vel.y *= boundDamping;
+        _particles[id.x].position.y = topRight.y - radius;
+    }
+
+    if (_particles[id.x].position.z + radius > topRight.z) {
+       vel.z *= boundDamping;
+        _particles[id.x].position.z = topRight.z - radius;
+    }
+
+    
+    _particles[id.x].velocity = vel;
+}
 \end{lstlisting}
+
+\clearpage
+
+### 6.3.4 Kernel Equations
+
+These four functions are the kernel implementations in the compute shader.
+
+- **StdKernel**
+    - This is the Standard Kernel also called the Poly6 kernel.
+    - It takes the distance which is called `distanceSquared` to be faithful to the formula.
+    - The formula in the function is modified for optimization purposes from Eqn. $(11)$
+- **SpikyKernelFirstDerivative**
+    - This is the First Derivation of the Spiky Kernel.
+    - We compute the first derivate of the Spiky kernel because we want to know how strongly each neighbouring particle exerts pressure. In mathematical terms we are seeing the vector between the two points which is distance and radius.
+    - The formula in the function has also been modified for optimization purposes from Eqn. $(12)$
+- **SpikyKernelSecondDerivative**
+    - This is the Second Derivation of the Spiky Kernel.
+    - We compute the second derivate of the Spiky kernel because we want to the viscosity which involves velocity of the particles. In mathematical terms we are measuring how curved the kernel function is around the particle, a larger curvature means stronger smoothing / diffusion effect.
+    - Again this forumla is also modified for optimization purposes from Eqn. $(12)$
+- **SpikyKernelGradient**
+    - This is the Gradient of the Spiky Kernel.
+    - We need this because it gives us the magnitude of the vector of how strong the vector of the particles are is which we can use in the pressure computation.
+    - This just returns the Spiky Kernels First Derivative and multiples that by the distance factor. 
+
+\begin{lstlisting}[language=GLSL, caption={The Integrate kernel}, captionpos=b]
+float StdKernel (float distanceSquared){
+    // 1 - r^2/h^2
+    float x = 1.0f - distanceSquared / radius2;
+    return 315.f/ (64.f * pi * radius3) * x * x * x;
+}
+// Smoothing Function for Compute Forces
+float SpikyKernelFirstDerivative(float distance){
+    // 1 - r/h
+    float x = 1.0f - distance/radius;
+    return -45.f/(pi*radius4)*x*x;
+}
+float SpikyKernelSecondDerivative(float distance){
+    float x = 1.0f - distance/radius;
+    return 90.f / (pi*radius5) *x;
+}
+float3 SpikyKernelGradient(float distance, float3 direction){
+    return SpikyKernelFirstDerivative(distance) *direction;
+}
+\end{lstlisting}
+
+### 6.3.5 Calculating Pressure
+
+This is calculating the pressure of each particle by taking the particles position as the origin and looping through all the particles in the simulation and calculating its difference and getting the distance from it. 
+
+It will then check if the particle is within a certain radius then it will apply the smoothing kernel the sum, then it will multiply it by the mass which we will get the density from.
+
+Then to calculate pressure we can just multiply the difference of the densities with the `gasConstant` to get the pressure of the particle.
+
+\hspace*{5mm}
+
+\begin{lstlisting}[language=GLSL, caption={Compute Kernel}, captionpos=b]
+[numthreads(100,1,1)]
+void ComputeDensityPressure(uint3 id: SV_DISPATCHTHREADID){
+
+    float3 origin = _particles[id.x].position;
+    float sum = 0;
+    
+    for (int i = 0;i < particleLength; i++){
+        float3 diff = origin - _particles[i].position;
+        float distanceSquared = dot(diff, diff);
+
+        if (radius2*0.004 >= distanceSquared*0.004){
+            sum += StdKernel(distanceSquared*0.004); // Apply Smoothing kernel
+        }
+
+    }
+
+    _particles[id.x].density = sum * particleMass + 0.000001f;
+    _particles[id.x].pressure = gasConstant * (_particles[id.x].density - restDensity);
+
+}
+\end{lstlisting}
+
+\clearpage
+
+### 6.3.6 Calculating the Force
+
