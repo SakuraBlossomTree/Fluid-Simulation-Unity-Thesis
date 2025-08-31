@@ -622,7 +622,7 @@ private void FixedUpdate() {
 
 \clearpage
 
-## 6.3 SPHCompute compute shader
+## 6.3 SPH Compute compute shader
 
 The SPH Compute function is the function that computes the forces for each particles to neighbouring particles and sends the data to Unity to use.
 
@@ -795,11 +795,14 @@ float3 SpikyKernelGradient(float distance, float3 direction){
 
 ### 6.3.5 Calculating Pressure
 
-This `ComputeDensityPressure` kernel is calculating the pressure of each particle by taking the particles position as the origin and looping through all the particles in the simulation and calculating its difference and getting the distance from it. 
+\begin{itemize}
+    \item This \texttt{ComputeDensityPressure} kernel is calculating the pressure of each particle by taking the particles position as the origin and looping through all the particles in the simulation and calculating its difference and getting the distance from it. 
 
-It will then check if the particle is within a certain radius then it will apply the smoothing kernel the sum, then it will multiply it by the mass which we will get the density from.
+    \item It will then check if the particle is within a certain radius then it will apply the smoothing kernel the sum, then it will multiply it by the mass which we will get the density from.
 
-Then to calculate pressure we can just multiply the difference of the densities with the `gasConstant` to get the pressure of the particle.
+    \item Then to calculate pressure we can just multiply the difference of the densities with the \texttt{gasConstant} to get the pressure of the particle.
+
+\end{itemize}
 
 \hspace*{5mm}
 
@@ -830,19 +833,21 @@ void ComputeDensityPressure(uint3 id: SV_DISPATCHTHREADID){
 
 ### 6.3.6 Calculating the Force
 
-This `ComputeForces` kernel is then calulating the force of the particle by taking the `i` particle's position as the origin, then it loops through all the particles.
+\begin{itemize}
+    \item This \texttt{ComputeForces} kernel is then calulating the force of the particle by taking the \texttt{i} particle's position as the origin, then it loops through all the particles.
 
-We also do a check where we don't compute the force if the particle position is the same i.e we are checking ourselves.
+    \item We also do a check where we don't compute the force if the particle position is the same i.e we are checking ourselves.
 
-We then check the distance between the particles if the distance is twice of the radius which is the smoothing radius to remove computational overhead of calculating all the forces of the particles because we know that when the particle is far enough it's force to the other particle is non-existant.
+    \item We then check the distance between the particles if the distance is twice of the radius which is the smoothing radius to remove computational overhead of calculating all the forces of the particles because we know that when the particle is far enough it's force to the other particle is non-existant.
 
-We then get the `_pressureGradientDirection` which is the pressure gradient direction by normalizing the vector between the particles.
+    \item We then get the \texttt{\_pressureGradientDirection} which is the pressure gradient direction by normalizing the vector between the particles.
 
-We then calculate the total pressure contribution which is stored in `_pressureContribution` which is twice the mass (the reason we are able to do this is because the mass of all the particles are same) which we multiply by the spiky kernel gradient, then we multiply thatt to the pressure formula 
+    \item We then calculate the total pressure contribution which is stored in \texttt{\_pressureContribution} which is twice the mass (the reason we are able to do this is because the mass of all the particles are same) which we multiply by the spiky kernel gradient, then we multiply thatt to the pressure formula 
 
-For calculating viscosity we are able to use the formula and multiply with the viscosity of the fluid, we are also calculating the difference in the velocities of the particles and divide by the density which is what the formula says 
+    \item For calculating viscosity we are able to use the formula and multiply with the viscosity of the fluid, we are also calculating the difference in the velocities of the particles and divide by the density which is what the formula says 
 
-Then we finally multiply the viscosity to the Spiky Kernel Second Derivative.
+    \item Then we finally multiply the viscosity to the Spiky Kernel Second Derivative.
+\end{itemize}
 
 \clearpage
 
@@ -886,5 +891,102 @@ void ComputeForces(uint3 id: SV_DISPATCHTHREADID){
         _particles[id.x].currentForce += colDir * 300;
     }
 
+}
+\end{lstlisting}
+
+\clearpage
+
+## 6.4 Fluid Ray Marching
+
+### 6.4.1 Initializing and Setting the Render Texture
+
+The `FluidRayMarching` script serves as the central component responsible for managing the ray marching rendering effect. Its primary function is to perform a comprehensive initialization of all the necessary data, which includes configuring the shader parameters and setting up the required textures. 
+
+A critical part of this setup is handled by the `InitRenderTexture` method, which is dedicated specifically to initializing the main render texture that the camera will use as an output target. Once this entire initialization phase is complete and every parameter is correctly established, the script's final role is to send all of this configured information to the Raymarching.compute shader, which then utilizes the data to perform the fluid rendering calculations.
+
+\hspace*{5mm}
+
+\begin{lstlisting}
+public class FluidRayMarching : MonoBehaviour
+{
+    public ComputeShader raymarching;
+    public Camera cam;
+    List<ComputeBuffer> buffersToDispose = new List<ComputeBuffer>();
+    public SPH sph;
+    RenderTexture target;
+    [Header("Params")]
+    public float viewRadius;
+    public float blendStrength;
+    public Color waterColor;
+    public Color ambientLight;
+    public Light lightSource;
+
+    void InitRenderTexture()
+    {
+        if (target == null || target.width != cam.pixelWidth || target.height != cam.pixelHeight)
+        {
+            if (target != null)
+            {
+                target.Release();
+            }
+
+            cam.depthTextureMode = DepthTextureMode.Depth;
+
+            target = new RenderTexture(cam.pixelWidth, cam.pixelHeight, 0, RenderTextureFormat.ARGBFloat, RenderTextureReadWrite.Linear);
+            target.enableRandomWrite = true;
+            target.Create();
+        }
+    }
+    private bool render = false;
+    public ComputeBuffer _particlesBuffer;
+}
+\end{lstlisting}
+
+### 6.4.2 Passing data to the GPU for the Ray Marching Compute Shader. 
+
+The `Begin` function it calls the `InitRenderTexture` function and then passes all the parameters to the `Raymarching` shader and sets its rendering to true. 
+
+The `OnRenderImage` function it checks if the render is false it calls the `Begin` method, when render is called it passes all the parameters to the group and combines divides the threads by 8 because that was how many threads we provided in the `Raymarching` shader and dispatches the shader.
+
+\hspace*{5mm}
+
+\begin{lstlisting}
+public void Begin()
+{
+        InitRenderTexture();
+        raymarching.SetBuffer(0, "particles", sph._particlesBuffer);
+        raymarching.SetInt("numParticles", sph.particles.Length);
+        raymarching.SetFloat("particleRadius", viewRadius);
+        raymarching.SetFloat("blendStrength", blendStrength);
+        raymarching.SetVector("waterColor", waterColor);
+        raymarching.SetVector("_AmbientLight", ambientLight);
+        raymarching.SetTextureFromGlobal(0, "_DepthTexture", "_CameraDepthTexture");
+        render = true;
+}
+    void OnRenderImage(RenderTexture source, RenderTexture destination)
+    {
+
+        if (!render)
+        {
+            Begin();
+        }
+
+        if (render)
+        {
+
+            raymarching.SetVector("_Light", lightSource.transform.forward);
+
+            raymarching.SetTexture(0, "Source", source);
+            raymarching.SetTexture(0, "Destination", target);
+            raymarching.SetVector("_CameraPos", cam.transform.position);
+            raymarching.SetMatrix("_CameraToWorld", cam.cameraToWorldMatrix);
+            raymarching.SetMatrix("_CameraInverseProjection", cam.projectionMatrix.inverse);
+
+            int threadGroupsX = Mathf.CeilToInt(cam.pixelWidth / 8.0f);
+            int threadGroupsY = Mathf.CeilToInt(cam.pixelHeight / 8.0f);
+            raymarching.Dispatch(0, threadGroupsX, threadGroupsY, 1);
+
+            Graphics.Blit(target, destination);
+        }
 }
 \end{lstlisting}
