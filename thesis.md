@@ -990,3 +990,161 @@ public void Begin()
         }
 }
 \end{lstlisting}
+
+\clearpage
+
+## 6.5 The Ray Marching Shader
+
+The `RayMarching` compute shader will have the Ray Marching shader code.
+
+### 6.5.1 Initializing the Shader Parameters
+
+The following code block initializes all the parameters required for the shader, There are values taken from the `FluidRayMarching` script which contains the Source ,Destination and Depth textures and the camera world coordinates.
+
+The Particle structure defines all the properties of the particles here (This is similar to the `SPHCompute` shader). Then there is a particles buffer and all other values. 
+
+\hspace*{5mm}
+
+\begin{lstlisting}{language=GLSL}
+#pragma kernel CSMain
+
+Texture2D<float4> Source;
+RWTexture2D<float4> Destination;
+Texture2D<float4> _DepthTexture;
+
+float4x4 _CameraToWorld;
+float4x4 _CameraInverseProjection;
+
+static const float maxDst = 80;
+static const float epsilon = 0.001f;
+static const float shadowBias = epsilon * 50;
+
+struct Particle
+{
+    float pressure;
+    float density;
+    float3 currentForce;
+    float3 velocity;
+    float3 position;
+};
+
+StructuredBuffer<Particle> particles;
+int numParticles;
+float particleRadius;
+float blendStrength;
+float3 waterColor;
+float3 _Light;
+float3 _AmbientLight;
+float3 _CameraPos;
+\end{lstlisting}
+
+\clearpage
+
+### 6.5.2 Ray Initialization
+
+The `Ray` structure is defining a Ray with two attributes origin and direction, the `CreateRay` function then creates a Ray object which it adds the origin and direction attributes to it.
+
+The `CreateCameraRay` takes a `uv` coordinate and transforms the camera world space coordinates into xyz coordinates, the same it does for directions as well. It then adds that to the variable and calls the `CreateRay` function which then returns the ray from the camera.
+
+The `SphereDistance` just calculates from the ray point to the particle center and subtracts the radius of sphere so when it is positive it is outside of the sphere, zero then on the surface and inside the sphere when negative.
+
+\hspace*{5mm}
+
+\begin{lstlisting}
+struct Ray {
+    float3 origin;
+    float3 direction;
+};
+
+float SphereDistance(float3 eye, float3 centre, float radius) {
+    return distance(eye, centre) - radius;
+}
+
+Ray CreateRay(float3 origin, float3 direction) {
+    Ray ray;
+    ray.origin = origin;
+    ray.direction = direction;
+    return ray;
+}
+
+Ray CreateCameraRay(float2 uv) {
+    float3 origin = mul(_CameraToWorld, float4(0,0,0,1)).xyz;
+    float3 direction = mul(_CameraInverseProjection, float4(uv,0,1)).xyz;
+    direction = mul(_CameraToWorld, float4(direction,0)).xyz;
+    direction = normalize(direction);
+    return CreateRay(origin,direction);
+}
+\end{lstlisting}
+
+\clearpage
+
+### 6.5.3 Smooth Minimum 
+
+The smooth minimum ($smin$) function is a mathematical smoothing operation that is used in raymarching and fluid/particle blending. The formula of the smin function goes like this
+
+\begin{align}
+smin(a,b,k) = lerp(b,a,h) - k \cdot h(1-h), h = clamp(0.5 + 0.5 * (b-a)/k,0,1)
+\end{align}
+
+With this formula we can basically blend two objects smoothly which is what the `Blend` function does. The `Combine` function takes two colors and two distances and passes them in the `Blend` function which uses $smin$ to blend the colors together.
+
+The `GetSphereDistance` function returns the distance from the particle to the eye which is the camera.
+
+\hspace*{5mm}
+
+\begin{lstlisting}[language=GLSL]
+// polynomial smooth min (k = 0.1);
+// from https://www.iquilezles.org/www/articles/smin/smin.htm
+float4 Blend( float a, float b, float3 colA, float3 colB, float k )
+{
+    float h = clamp( 0.5+0.5*(b-a)/k, 0.0, 1.0 );
+    float blendDst = lerp( b, a, h ) - k*h*(1.0-h);
+    float3 blendCol = lerp(colB,colA,h);
+    return float4(blendCol, blendDst);
+}
+
+float4 Combine(float dstA, float dstB, float3 colourA, float3 colourB) {
+    float dst = dstA;
+    float3 colour = colourA;
+    float4 blend = Blend(dstA,dstB,colourA,colourB, blendStrength);
+    dst = blend.w;
+    colour = blend.xyz;
+    return float4(colour,dst);
+}
+
+float GetShapeDistance(Particle particle, float3 eye) {
+   
+    return SphereDistance(eye, particle.position, particleRadius);
+    return maxDst;
+}
+\end{lstlisting}
+
+\clearpage
+
+\begin{lstlisting}[language=GLSL]
+float4 SceneInfo(float3 eye) {
+    float globalDst = maxDst;
+    float3 globalColour = waterColor;
+    
+    for (int i = 0; i < numParticles; i ++) {
+        Particle particle = particles[i];
+
+        float localDst = GetShapeDistance(particle,eye);
+        float3 localColour = waterColor;
+
+
+        float4 globalCombined = Combine(globalDst, localDst, globalColour, localColour);
+        globalColour = globalCombined.xyz;
+        globalDst = globalCombined.w;        
+    }
+
+    return float4(globalColour, globalDst);
+}
+
+float3 EstimateNormal(float3 p) {
+    float x = SceneInfo(float3(p.x+epsilon,p.y,p.z)).w - SceneInfo(float3(p.x-epsilon,p.y,p.z)).w;
+    float y = SceneInfo(float3(p.x,p.y+epsilon,p.z)).w - SceneInfo(float3(p.x,p.y-epsilon,p.z)).w;
+    float z = SceneInfo(float3(p.x,p.y,p.z+epsilon)).w - SceneInfo(float3(p.x,p.y,p.z-epsilon)).w;
+    return normalize(float3(x,y,z));
+}
+\end{lstlisting}
