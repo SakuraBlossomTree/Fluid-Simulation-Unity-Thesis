@@ -9,6 +9,7 @@ header-includes:
   - \usepackage{listings}
   - \usepackage{xcolor}
   - \input{listings-glsl.prf}
+  - \usepackage{caption}
 ---
 
 \lstset{
@@ -1295,3 +1296,70 @@ void CSMain (uint3 id : SV_DispatchThreadID)
     }
 }
 \end{lstlisting}
+
+\clearpage
+
+# 7. Results
+
+<!-- The result after this was a relastic fluid like behaviour, which is also able to interact with other objects around it. -->
+
+The implementation of the raymarching-based particle fluid simulation produced a highly convincing and realistic fluid-like behavior. The particles were successfully blended together into a smooth surface using signed distance functions, and the marching cubes approximation created continuous fluid geometry. When rendered, the surface exhibited refraction, specular reflections, and lighting effects that closely resembled the optical properties of real water. The shading model, which incorporated both diffuse and specular components, added depth and realism to the visualization, while the refraction effect allowed the background scene to be distorted through the liquid in a physically plausible way. Furthermore, the simulation demonstrated the ability to interact naturally with objects in the surrounding scene, such as colliding against solid geometry or responding to environmental changes. Overall, the results validate the approach by combining physically inspired particle simulation with advanced rendering techniques, producing a visually appealing and interactive fluid representation.
+
+\begin{figure}[ht!]
+    \centering
+    \begin{minipage}{0.48\textwidth}
+        \centering
+        \includegraphics[height=5cm]{Particles_Fluid.png}
+        \captionsetup{width=0.9\linewidth}
+        \caption{Difference viscosity makes to a fluid}
+        \label{fig:gizmos_box}
+    \end{minipage}
+    \begin{minipage}{0.48\textwidth}
+        \centering
+        \includegraphics[height=5cm]{Particles_Fluid_Sphere_Reaction.png}
+        \captionsetup{width=0.9\linewidth}
+        \caption{Fluid particles reacting to a sphere object}
+        \label{fig:particles_reacting_sphere}
+    \end{minipage}
+\end{figure}
+
+\begin{figure}[ht!]
+    \centering
+    \begin{minipage}{0.48\textwidth}
+        \centering
+        \includegraphics[height=4cm]{Fluid_Render.png}
+        \captionsetup{width=0.7\linewidth}
+        \caption{Difference viscosity makes to a fluid}
+        \label{fig:gizmos_box}
+    \end{minipage}
+    \begin{minipage}{0.48\textwidth}
+        \centering
+        \includegraphics[height=4cm]{Fluid_Render_Sphere_Reaction.png}
+        \captionsetup{width=0.7\linewidth}
+        \caption{Fluid particles reacting to a sphere object}
+        \label{fig:particles_reacting_sphere}
+    \end{minipage}
+\end{figure}
+
+\clearpage
+
+# 8. Discussion
+
+The results obtained from the implementation of the fluid simulation demonstrate that the system is capable of producing visually realistic fluid-like behavior using a combination of Smoothed Particle Hydrodynamics (SPH) for particle dynamics and raymarching for surface rendering. The simulation not only generates a continuous and cohesive water-like surface but also allows for meaningful interaction with surrounding objects, which enhances the realism and applicability of the method in interactive environments such as games or virtual reality. Compared to traditional grid-based fluid solvers, this approach provides a more flexible and visually appealing representation of fluids, especially for dynamic particle systems, although it sacrifices some degree of physical accuracy in exchange for performance and rendering quality. One of the key strengths of this approach lies in its ability to balance computational efficiency with visual realism, leveraging GPU compute shaders to handle both the particle-based simulation and the raymarched surface efficiently. However, certain limitations remain evident. At higher particle counts, the computational cost increases significantly, leading to reduced frame rates, and the simplification of fluid properties such as surface tension and viscosity means that the simulation does not perfectly replicate real-world fluid dynamics. Despite these limitations, the work highlights the potential of combining SPH with raymarching as a practical approach to real-time fluid rendering. Future improvements could include the integration of more advanced physical models, optimizations for large-scale particle systems, and enhancements to lighting and refraction effects to increase realism. Overall, the discussion suggests that the presented method represents a promising direction for achieving realistic yet computationally efficient fluid simulations in real-time applications.
+
+\clearpage
+
+# 9. References 
+
+[1] Matthias Müller, David Charypar, and Markus Gross. *Particle-Based Fluid Simulation for Interactive Applications*.  
+
+Available at: \url{https://matthias-research.github.io/pages/publications/sca03.pdf}
+
+[2] Inigo Quilez *Smooth Minimum*.
+
+Available at: \url{https://iquilezles.org/articles/smin/}
+
+[3] AJTech *Coding a Realtime Fluid Simulation in Unity*
+
+Available at: \url{https://www.youtube.com/watch?v=zbBwKMRyavE}
+
