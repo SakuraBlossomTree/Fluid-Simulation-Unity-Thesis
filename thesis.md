@@ -1121,6 +1121,14 @@ float GetShapeDistance(Particle particle, float3 eye) {
 
 \clearpage
 
+### 6.5.4 Calculating Scene Info and Normals
+
+The `SceneInfo` function evalutes the whole particle-based fluid scene at a give 3D point, and return the close surface's signed distance + color. Which is uses the Combine function to get a smin of the particles which is then done to every particle in the scene.
+
+The `EstimateNormal` function estimates the normal vector to the given surface at a given point. It does this using central differences: the signed distance field is sampled at small offsets(eplision) along the x, y and z axes, and the gradient of these differences is normalized to obtain the surface normal. This is essential for shading, as normals are used in lighting calculations.
+
+\hspace*{5mm}
+
 \begin{lstlisting}[language=GLSL]
 float4 SceneInfo(float3 eye) {
     float globalDst = maxDst;
@@ -1146,5 +1154,144 @@ float3 EstimateNormal(float3 p) {
     float y = SceneInfo(float3(p.x,p.y+epsilon,p.z)).w - SceneInfo(float3(p.x,p.y-epsilon,p.z)).w;
     float z = SceneInfo(float3(p.x,p.y,p.z+epsilon)).w - SceneInfo(float3(p.x,p.y,p.z-epsilon)).w;
     return normalize(float3(x,y,z));
+}
+\end{lstlisting}
+
+\clearpage
+
+### 6.5.5 Calculating Shadow and Depth
+
+The `CalculateShadow` function calculates the shadow based on epsilon, if the distance is less than the epsilon which means the ray has hit the surface early then shadow intensity is set to low. If the distance of the ray is travelled more than the epsilon we then use this formula `shadowIntensity + (1-shadowIntensity) * brightness` to get the density. 
+
+The `LinearEyeDepth` function basically calculates all the depth for various graphics API (OPENGL, Vulkan, DirectX). 
+
+\hspace*{5mm}
+
+\begin{lstlisting}[language=GLSL]
+float CalculateShadow(Ray ray, float dstToShadePoint) {
+    float rayDst = 0;
+    int marchSteps = 0;
+    float shadowIntensity = .2;
+    float brightness = 1;
+
+    while (rayDst < dstToShadePoint) {
+        marchSteps ++;
+        float4 sceneInfo = SceneInfo(ray.origin);
+        float dst = sceneInfo.w;
+        
+        if (dst <= epsilon) {
+            return shadowIntensity;
+        }
+
+        brightness = min(brightness,dst*200);
+
+        ray.origin += ray.direction * dst;
+        rayDst += dst;
+    }
+    return shadowIntensity + (1-shadowIntensity) * brightness;
+}
+
+float LinearEyeDepth( float rawdepth )
+{
+    float _NearClip = 0.3;
+    float FarClip = 1000;
+    float x, y, z, w;
+    #if SHADER_API_GLES3 // insted of UNITY_REVERSED_Z
+        x = -1.0 + _NearClip/ FarClip;
+        y = 1;
+        z = x / _NearClip;
+        w = 1 / _NearClip;
+    #else
+        x = 1.0 - _NearClip/ FarClip;
+        y = _NearClip / FarClip;
+        z = x / _NearClip;
+        w = y / _NearClip;
+    #endif
+    
+    return 1.0 / (z * rawdepth + w);
+}
+\end{lstlisting}
+
+\clearpage
+
+### 6.5.6 Compute Shader Main Loop
+
+\begin{itemize}
+    \item The \texttt{CSMain} kernel is the main rendering function of the compute shader, responsible for simulating the fluid surface.
+    \item For each pixel, a ray is generated from the camera through that pixel and marched into the scene using sphere tracing.
+    \item The \texttt{SceneInfo} function is called at each step to compute the signed distance to the closest surface.
+    \item If the ray intersects the surface, the intersection point is calculated and the \texttt{EstimateNormal} function is used to approximate the surface normal via finite differences.
+    \item The surface normal is then used in a Phong-inspired lighting model that combines ambient, diffuse, and specular lighting to shade the fluid.
+    \item A refraction effect is applied by bending the viewing direction through the surface and sampling the background image, which is blended with the fluid’s color.
+    \item The final shaded color is written to the output texture, producing the rendered image of the fluid with lighting and transparency effects.
+\end{itemize}
+
+\hspace*{5mm}
+
+\begin{lstlisting}[language=GLSL]
+[numthreads(8,8,1)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+    uint width,height;
+    Destination.GetDimensions(width, height);
+
+    Destination[id.xy] = Source[id.xy];
+
+    float2 uv = id.xy / float2(width,height) * 2 - 1;
+    float rayDst = 0;
+
+    Ray ray = CreateCameraRay(uv);
+    int marchSteps = 0;
+
+    float depth = LinearEyeDepth(_DepthTexture[id.xy]);
+
+    while (rayDst < maxDst) {
+        marchSteps ++;
+        float4 sceneInfo = SceneInfo(ray.origin);
+        float dst = sceneInfo.w;
+
+        if (rayDst >= depth) {
+            Destination[id.xy] = Source[id.xy];
+            break;
+        }
+        
+        if (dst <= epsilon) {
+            float3 pointOnSurface = ray.origin + ray.direction * dst;
+            float3 normal = EstimateNormal(pointOnSurface - ray.direction * epsilon);
+            float3 lightDir = -_Light;
+            float lighting = saturate(saturate(dot(normal,lightDir))) ;
+
+            float3 reflectDir = reflect(-lightDir, normal);
+            float spec = pow(max(dot(ray.direction, reflectDir), 0.0), 32);
+            float3 specular = 0.7 * spec * float3(1,1,1);
+
+            float3 col = sceneInfo.xyz;
+
+            float3 t1 = cross(normal, float3(0,0,1));
+            float3 t2 = cross(normal, float3(0,1,0));
+            float3 tangent = float3(0,0,0);
+            if (length(t1) > length(t2)) {
+                tangent = normalize(t1);
+            }
+            else {
+                tangent = normalize(t2);
+            }
+
+            float3x3 tangentMatrix = float3x3(tangent,cross(tangent, normal),normal);
+
+            float3 viewDir = normalize(pointOnSurface-_CameraPos);
+
+            float3 refracted = mul(tangentMatrix, refract(viewDir, normal,1));
+            
+
+            Destination[id.xy] = float4(lerp(col, Source[id.xy+(refracted.xy)], 0.8) * (specular + _AmbientLight + lighting * 0.01),1);
+           
+
+            break;
+        }
+
+        ray.origin += ray.direction * dst;
+        rayDst += dst;
+    }
 }
 \end{lstlisting}
