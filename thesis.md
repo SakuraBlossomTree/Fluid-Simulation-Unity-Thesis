@@ -1,6 +1,4 @@
 ---
-title: \textbf{Smoothed Particle Hydrodynamics for Real-Time Fluid Simulation for Unity}
-author: "Yohib Hussain"
 fontsize: 12pt
 mainFont: "Times New Roman"
 geometry: margin=1in
@@ -11,6 +9,19 @@ header-includes:
   - \input{listings-glsl.prf}
   - \usepackage{caption}
 ---
+
+\begin{titlepage}
+    \centering
+    \vspace*{5cm} % pushes it down a bit
+    {\Huge \bfseries Smoothed Particle Hydrodynamics for Real-Time Fluid Simulation for Unity \par}
+    \vspace{2cm}
+    {\Large Yohib Hussain \par}
+    \vfill
+\end{titlepage}
+
+\clearpage
+
+\tableofcontents
 
 \lstset{
     language=[Sharp]C,              % Set default language to C#
@@ -171,7 +182,7 @@ because the velocity field varies from particle to particle. Since viscosity for
         \centering
         \includegraphics[height=9cm]{viscosity.png}
         \caption{Difference viscosity makes to a fluid}
-        \label{fig:gizmos_box}
+        \label{fig:Difference viscosity makes to a fluid}
     \end{minipage}
 \end{figure}
 
@@ -489,7 +500,7 @@ private void SpawnParticlesInBox() {
     \centering
     \begin{minipage}{0.48\textwidth}
         \centering
-        \includegraphics[height=12cm]{particlegrid.png}
+        \includegraphics[height=9cm]{particlegrid.png}
         \caption{Particle in a grid box}
         \label{fig:particle_grid_box}
     \end{minipage}
@@ -1004,7 +1015,7 @@ The Particle structure defines all the properties of the particles here (This is
 
 \hspace*{5mm}
 
-\begin{lstlisting}{language=GLSL, caption={Particle struct shader}, captionpos=b}
+\begin{lstlisting}[language=GLSL, caption={Particle struct shader}, captionpos=b]
 #pragma kernel CSMain
 
 Texture2D<float4> Source;
@@ -1328,7 +1339,7 @@ The implementation of the raymarching-based particle fluid simulation produced a
         \includegraphics[height=4cm]{Fluid_Render.png}
         \captionsetup{width=0.7\linewidth}
         \caption{Fluid Rendering}
-        \label{fig:Particles_Fluid}
+        \label{fig:Fluid_Render}
     \end{minipage}
     \begin{minipage}{0.48\textwidth}
         \centering
@@ -1359,3 +1370,16 @@ Available at: \url{https://iquilezles.org/articles/smin/}
 
 Available at: \url{https://www.youtube.com/watch?v=zbBwKMRyavE}
 
+\clearpage
+
+# A. Appendix
+
+The code is unoptimized I tried to implement a basic randering ray marching and a basic SPH fluid simulation, there are ways in which this can be improved.
+
+1. **Efficient Neighbour Search:** 
+
+Instaed of checking all the particles against each other, using a grid based spatial partitioning system to determine the neighbour particles instead of going over all the particles in the simulation and using Bitonic mergesort to sort them and use the memory effciently. Because the current algorithm is $O(n^{2})$
+
+2. **Ray Marching Optimization:** 
+
+The ray marching currently evalutes all particles on the screen, calculating rays for each and every particle is quite expensive. Ideally, the function should be optimized to consider only a subset of particles that significantly affect the rendered image. The current algorihm is $O(n)$, and further optimizations techniques remain to be explored.
