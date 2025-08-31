@@ -27,9 +27,9 @@ header-includes:
     tabsize=4                        % Tab width
 }
 
-\hrule
-
 \clearpage
+
+\hrule
 
 # Abstract
 
@@ -148,11 +148,37 @@ p = k (\rho - \rho_0)
 
 where $\rho_0$ is the rest density. Which I have given as a constant
 
-## 3.2 External Forces
+\clearpage
 
-In the Unity Project which supports gravity, collision forces and forces caused by user interaction. These forces are applied directly to the particles without the use of SPH. When the particles collide with any solid object such as the blue box in my Unity Simulation, we simply push them out of the object and reflect the velocity component that is perpendicular to the object's surface.
+## 3.2 Viscosity
+
+Application of the SPH rule to the viscosity term $\mu \nabla^{2} \textbf{v}$ again yields the asymmetric forces
+
+\begin{align}
+\textbf{f}^{viscosity}_i = \mu \nabla^{2} \textbf{v}(\textbf{r}_a) = \mu \sum_j m_j \frac{v_j}{\rho_j} \nabla^{2} W(\textbf{r}_i - \textbf{r}_j , h)
+\end{align}
+
+because the velocity field varies from particle to particle. Since viscosity forces are only depedent on the velocity differences and not on absolute velocities, there is a natural way to symmetrize the viscosity forces by using the velocity differences:
+
+\begin{align}
+\textbf{f}^{viscosity}_i = \mu \sum_j m_j \frac{v_j - v_i}{\rho_j} \nabla^{2} W(\textbf{r}_i - \textbf{r}_j , h)
+\end{align}
+
+\begin{figure}[ht!]
+    \hspace*{-0.1cm}
+    \begin{minipage}{0.48\textwidth}
+        \centering
+        \includegraphics[height=9cm]{viscosity.png}
+        \caption{Difference viscosity makes to a fluid}
+        \label{fig:gizmos_box}
+    \end{minipage}
+\end{figure}
 
 \clearpage
+
+## 3.3 External Forces
+
+In the Unity Project which supports gravity, collision forces and forces caused by user interaction. These forces are applied directly to the particles without the use of SPH. When the particles collide with any solid object such as the blue box in my Unity Simulation, we simply push them out of the object and reflect the velocity component that is perpendicular to the object's surface.
 
 # 4. Smoothing kernels
 
@@ -769,7 +795,7 @@ float3 SpikyKernelGradient(float distance, float3 direction){
 
 ### 6.3.5 Calculating Pressure
 
-This is calculating the pressure of each particle by taking the particles position as the origin and looping through all the particles in the simulation and calculating its difference and getting the distance from it. 
+This `ComputeDensityPressure` kernel is calculating the pressure of each particle by taking the particles position as the origin and looping through all the particles in the simulation and calculating its difference and getting the distance from it. 
 
 It will then check if the particle is within a certain radius then it will apply the smoothing kernel the sum, then it will multiply it by the mass which we will get the density from.
 
@@ -804,3 +830,61 @@ void ComputeDensityPressure(uint3 id: SV_DISPATCHTHREADID){
 
 ### 6.3.6 Calculating the Force
 
+This `ComputeForces` kernel is then calulating the force of the particle by taking the `i` particle's position as the origin, then it loops through all the particles.
+
+We also do a check where we don't compute the force if the particle position is the same i.e we are checking ourselves.
+
+We then check the distance between the particles if the distance is twice of the radius which is the smoothing radius to remove computational overhead of calculating all the forces of the particles because we know that when the particle is far enough it's force to the other particle is non-existant.
+
+We then get the `_pressureGradientDirection` which is the pressure gradient direction by normalizing the vector between the particles.
+
+We then calculate the total pressure contribution which is stored in `_pressureContribution` which is twice the mass (the reason we are able to do this is because the mass of all the particles are same) which we multiply by the spiky kernel gradient, then we multiply thatt to the pressure formula 
+
+For calculating viscosity we are able to use the formula and multiply with the viscosity of the fluid, we are also calculating the difference in the velocities of the particles and divide by the density which is what the formula says 
+
+Then we finally multiply the viscosity to the Spiky Kernel Second Derivative.
+
+\clearpage
+
+\begin{lstlisting}[language=GLSL, caption={Compute Forces Kernel}, captionpos=b]
+[numthreads(100,1,1)]
+void ComputeForces(uint3 id: SV_DISPATCHTHREADID){
+
+    float3 origin = _particles[id.x].position;
+    float density2 = _particles[id.x].density * _particles[id.x].density;
+    float mass2 = particleMass * particleMass;
+    float3 pressure = float3(0,0,0);
+    float3 visc = float3(0,0,0);
+
+    for (int i = 0;i < particleLength; i++){
+        if (origin.x == _particles[i].position.x && origin.y == _particles[i].position.y && origin.z == _particles[i].position.z){
+            continue;
+        }
+
+
+        float dist = distance(_particles[i].position, origin);
+        if(dist < radius*2){
+            float3 pressureGradientDirection = normalize(_particles[id.x].position - _particles[i].position);
+
+            float3 _pressureContribution = mass2 * SpikyKernelGradient(dist, pressureGradientDirection);
+            _pressureContribution *= (_particles[id.x].pressure / density2 + _particles[i].pressure / (_particles[i].density * _particles[i].density));
+
+            float3 _viscosityContribution = viscosity * mass2 * (_particles[i].velocity - _particles[id.x].velocity) / _particles[i].density;
+            _viscosityContribution *= SpikyKernelSecondDerivative(dist);
+            
+            pressure += _pressureContribution;
+            visc += _viscosityContribution;
+
+        }
+
+    }
+
+    _particles[id.x].currentForce = float3(0,-9.81*particleMass,0) - pressure + visc;
+
+    float3 colDir = _particles[id.x].position - spherePos;
+    if (length(colDir) < sphereRadius){
+        _particles[id.x].currentForce += colDir * 300;
+    }
+
+}
+\end{lstlisting}

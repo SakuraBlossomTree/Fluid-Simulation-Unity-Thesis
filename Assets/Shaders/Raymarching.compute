@@ -78,7 +78,6 @@ float GetShapeDistance(Particle particle, float3 eye) {
     return maxDst;
 }
 
-
 float4 SceneInfo(float3 eye) {
     float globalDst = maxDst;
     float3 globalColour = waterColor;
@@ -163,8 +162,6 @@ void CSMain (uint3 id : SV_DispatchThreadID)
     int marchSteps = 0;
 
     float depth = LinearEyeDepth(_DepthTexture[id.xy]);
-
-    
 
     while (rayDst < maxDst) {
         marchSteps ++;
